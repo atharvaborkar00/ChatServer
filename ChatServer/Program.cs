@@ -12,24 +12,64 @@ namespace ChatServer
     {
         // List to store connected clients
         static List<TcpClient> clients = new List<TcpClient>();
+
+        static TcpListener server;
+
+        static CancellationTokenSource cts = new CancellationTokenSource();
+
         static void Main(string[] args)
         {
+
+            // Create a separate thread to listen for incoming connections
+            Thread serverThread = new Thread(() => StartServer(cts.Token));
+            serverThread.Start();
+
+            //Wait for the input to stop the server
+            Console.WriteLine("Press Enter to stop the server");
+            Console.ReadLine(); //Waits for you to press Enter
+
+            //Cancel the server Operation
+            cts.Cancel(); //sends cancellation signal to stop the server
+            server.Stop(); //Gracefully stops the server
+            Console.WriteLine("Server Stopped.");
+
+        }
+
+        static void StartServer(CancellationToken token)
+        {
+            //set up the TCP server
             //Create a TCP Listener that listens on localhost(127.0.0.1) and port 5002.
-            TcpListener server = new TcpListener(IPAddress.Parse("127.0.0.1"), 5002);
+            server = new TcpListener(IPAddress.Parse("127.0.0.1"), 5002);
             server.Start(); //Start the server.
             Console.WriteLine("Server started on 127.0.0.1:5002");
 
-            while (true)
+            try
             {
-                //Accept a new client connection.
-                TcpClient client = server.AcceptTcpClient();
-                clients.Add(client); // Add the client to the list of connected clients.
-                Console.WriteLine("New client added");
+                while (!token.IsCancellationRequested)
+                {
+                    if (server.Pending())
+                    {
+                        //Accept a new client connection.
+                        TcpClient client = server.AcceptTcpClient();
+                        clients.Add(client); // Add the client to the list of connected clients.
+                        Console.WriteLine("New client connected");
 
-                //Start a new thread to handle communication with the connected client.
-                Thread thread = new Thread(() => HandleClient(client));
-                thread.Start();
-
+                        //Start a new thread to handle communication with the connected client.
+                        Thread thread = new Thread(() => HandleClient(client));
+                        thread.Start();
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                if (token.IsCancellationRequested)
+                {
+                    Console.WriteLine("Server is shutting down...");
+                }
+                else
+                {
+                    Console.WriteLine("Socket error: " + e.Message);
+                }
             }
         }
 
